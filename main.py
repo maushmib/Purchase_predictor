@@ -1,81 +1,75 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+import sys
 
-from src.preprocess import load_and_preprocess
-from src.feature_selection import select_features
-from src.dimensionality import reduce_dimensionality
-from src.models.bayes_classifier import train_bayes
-from src.models.decision_tree import train_decision_tree
-from src.models.regression import train_regression
-from src.models.neural_network import train_nn
-from src.evaluate import print_metrics
+from src.preprocessing import load_and_preprocess
+from src.feature_engineering import select_marketing_signals, build_personas, interpret_personas
+from src.modeling import train_decision_tree, train_bayes, train_regression
 
-# --- Load & Preprocess ---
-X_train, X_test, y_train, y_test = load_and_preprocess()
+def generate_business_insights(X_df, y_class):
+    """
+    Business Insight Generator (Item 4)
+    Computes simple insights dynamically based on target splits.
+    """
+    insights = []
+    
+    # 1. PageValues Insight
+    if "PageValues" in X_df.columns:
+        high_pv = X_df[X_df["PageValues"] > X_df["PageValues"].median()]
+        high_pv_conv = y_class.loc[high_pv.index].mean()
+        all_conv = y_class.mean()
+        multiplier = high_pv_conv / (all_conv + 1e-5)
+        insights.append(f"Users with high PageValues have {multiplier:.1f}x higher conversion rate.")
 
-# --- Feature Selection ---
-X_train_sel, X_test_sel = select_features(X_train, y_train, X_test)
+    # 2. BounceRates Insight
+    if "BounceRates" in X_df.columns:
+        low_bounce = X_df[X_df["BounceRates"] < X_df["BounceRates"].median()]
+        low_bounce_conv = y_class.loc[low_bounce.index].mean()
+        insights.append(f"Users with below-average BounceRates convert at {low_bounce_conv:.1%}.")
+        
+    return insights
 
-# --- Dimensionality Reduction ---
-dim_results = reduce_dimensionality(X_train_sel, X_test_sel)
-X_train_pca, X_test_pca = dim_results["pca"]
+if __name__ == "__main__":
+    print("==================================================")
+    print("E-Commerce Decision Intelligence Platform - Engine")
+    print("==================================================")
 
-# --- Function to plot predictions ---
-def plot_predictions(y_true, y_pred, title):
-    sns.scatterplot(x=range(len(y_true)), y=y_true, label="True", color="blue")
-    sns.scatterplot(x=range(len(y_pred)), y=y_pred, label="Predicted", color="red")
-    plt.title(title)
-    plt.xlabel("Sample Index")
-    plt.ylabel("Value / Class")
-    plt.legend()
-    plt.show()
+    # --- 1. Load & Preprocess ---
+    print("\n[Phase 1] Preprocessing Data & Generating Synthetic Revenue Targets...")
+    X_train_sc, X_test_sc, y_train_cls, y_test_cls, y_train_reg, y_test_reg, feat_names, pipeline = load_and_preprocess()
 
-# --- Train Bayesian Classifier ---
-print("Training Bayesian Classifier...")
-bayes_result = train_bayes(X_train_pca, y_train, X_test_pca, y_test)
-bayes_preds = bayes_result["predictions"]
-print("Bayes Accuracy:", bayes_result["accuracy"])
-print_metrics(y_test, bayes_preds)
-plot_predictions(y_test, bayes_preds, "Bayesian Classifier Predictions")
+    # --- 2. Feature Engineering ---
+    print("[Phase 2] Engineering Features & Constructing Personas...")
+    X_train_sel, X_test_sel, best_feats, selector = select_marketing_signals(
+        X_train_sc, y_train_cls, X_test_sc, feat_names
+    )
+    dim_res = build_personas(X_train_sel, X_test_sel)
+    
+    # Generate static insights (Using X_train combined for statical validity)
+    try:
+        raw_df = pd.read_csv("data/online_shoppers_intention.csv")
+        y_overall = raw_df["Revenue"].astype(int)
+        insights = generate_business_insights(raw_df, y_overall)
+        print("\n=== Business Insights Generator ===")
+        for ins in insights:
+            print(f" 💡 {ins}")
+    except Exception as e:
+        print("Could not generate text insights.")
 
-# --- Train Decision Tree ---
-print("Training Decision Tree...")
-dt_result = train_decision_tree(X_train_pca, y_train, X_test_pca, y_test)
-dt_preds = dt_result["predictions"]
-print("Decision Tree Accuracy:", dt_result["accuracy"])
-print_metrics(y_test, dt_preds)
-plot_predictions(y_test, dt_preds, "Decision Tree Predictions")
+    # --- 3. Modeling ---
+    print("\n[Phase 3] Booting Modeling Engines...")
+    
+    # Classification
+    dt_res = train_decision_tree(X_train_sel, y_train_cls, X_test_sel, y_test_cls)
+    bayes_res = train_bayes(X_train_sel, y_train_cls, X_test_sel, y_test_cls)
+    
+    print(f"--> Decision Tree Accuracy: {dt_res['accuracy']:.2%}")
+    print(f"--> Bayesian Probability Modeler Accuracy: {bayes_res['accuracy']:.2%}")
 
-# --- Train Regression ---
-print("Training Regression...")
-reg_result = train_regression(X_train_pca, y_train, X_test_pca, y_test)
-reg_preds = reg_result["predictions"]
-print("Regression RMSE:", reg_result["rmse"])
-plot_predictions(y_test, reg_preds, "Regression Predictions")
+    # Regression
+    reg_res = train_regression(X_train_sel, y_train_reg, X_test_sel, y_test_reg)
+    print(f"--> Revenue Predictor RMSE: ${reg_res['rmse']:.2f}")
 
-# --- Train Neural Network ---
-print("Training Neural Network...")
-nn_result = train_nn(X_train_pca, y_train, X_test_pca, y_test)
-nn_preds = nn_result["predictions"]
-print("Neural Network Accuracy:", nn_result["accuracy"])
-print_metrics(y_test, nn_preds)
-plot_predictions(y_test, nn_preds, "Neural Network Predictions")
-
-# --- Save All Predictions ---
-df_preds = pd.DataFrame({
-    "True": y_test.values,
-    "Bayes": bayes_preds,
-    "DecisionTree": dt_preds,
-    "NeuralNetwork": nn_preds,
-    "Regression": reg_preds
-})
-df_preds.to_csv("predictions.csv", index=False)
-print("Predictions saved to predictions.csv")
-
-# --- PCA Scatter Plot ---
-sns.scatterplot(x=X_test_pca[:, 0], y=X_test_pca[:, 1], hue=y_test)
-plt.title("PCA Scatter Plot of Test Data")
-plt.xlabel("PC1")
-plt.ylabel("PC2")
-plt.show()
+    print("\n[Engine Ready] Transition to Streamlit (app.py) for Interactive Explainability, Simulation, and Persona maps.")
+
