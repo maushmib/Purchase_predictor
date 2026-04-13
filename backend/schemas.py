@@ -1,0 +1,20 @@
+from pydantic import BaseModel, Field
+
+class VisitorFeatures(BaseModel):
+    Administrative: float = Field(0, description="# administrative pages visited")
+    Administrative_Duration: float = Field(0.0, description="Time on admin pages (s)")
+    Informational: float = Field(0, description="# informational pages visited")
+    Informational_Duration: float = Field(0.0, description="Time on info pages (s)")
+    ProductRelated: float = Field(2, description="# product pages visited")
+    ProductRelated_Duration: float = Field(30.0, description="Time on product pages (s)")
+    BounceRates: float = Field(0.02, description="Avg bounce rate of visited pages")
+    ExitRates: float = Field(0.04, description="Avg exit rate of visited pages")
+    PageValues: float = Field(0.0, description="Avg page value (Google Analytics)")
+    SpecialDay: float = Field(0.0, description="Closeness to special day (0-1)")
+    Month: str = Field("Nov")
+    OperatingSystems: int = Field(2)
+    Browser: int = Field(2)
+    Region: int = Field(1)
+    TrafficType: int = Field(2)
+    VisitorType: str = Field("Returning_Visitor")
+    Weekend: bool = Field(False)
